@@ -8,16 +8,19 @@ module Emulator
     ) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (forM, forM_)
+import Control.Monad (forM)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.ST (ST, runST)
 import Control.Monad.Trans (lift)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Word (Word, Word16)
-import Text.Printf (printf)
+
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 
 import Instruction
 import Memory (Address, Memory)
+import Util
 import qualified Memory as Memory
 
 type EmulatorM s = ReaderT (Memory s) (ST s)
@@ -28,10 +31,21 @@ runEmulatorM program = runST $ do
     Memory.store mem Memory.sp 0xffff
     runReaderT program mem
 
-loadProgram :: [Word16] -> EmulatorM s ()
-loadProgram ws = do
-    mem <- ask
-    forM_ (zip [0 ..] ws) $ \(i, w) -> lift $ Memory.store mem (Memory.ram i) w
+-- | Load a program from a bytestring
+loadProgram :: ByteString -> EmulatorM s ()
+loadProgram bs = loop 0
+  where
+    len = B.length bs
+    loop !i
+        | i + 1 >= len = return ()
+        | otherwise    = do
+            let !b1   = fromIntegral $ B.index bs i
+                !b2   = fromIntegral $ B.index bs (i + 1)
+                !w16  = (b1 `shiftL` 8) + b2
+                !addr = fromIntegral $ i `div` 2
+            mem <- ask
+            lift $ Memory.store mem (Memory.ram addr) w16
+            loop (i + 2)
 
 loadNextWord :: EmulatorM s Word16
 loadNextWord = do
@@ -270,6 +284,3 @@ prettifyRam = do
         mem  <- ask
         vals <- mapM (lift . Memory.load mem . Memory.ram) [lo .. up]
         return $ prettifyWord16 lo ++ ": " ++ unwords (map prettifyWord16 vals)
-
-prettifyWord16 :: Word16 -> String
-prettifyWord16 = printf "%04x"

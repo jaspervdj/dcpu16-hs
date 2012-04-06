@@ -11,6 +11,7 @@ import Data.Bits (shiftR, (.&.))
 import Data.Word (Word16)
 
 import Memory
+import Util
 
 data BasicInstruction
     = Set
@@ -61,10 +62,10 @@ parseInstruction word = case oooo of
     -- Non-basic instructions
     0x0 -> case aaaaaa of
         0x01 -> NonBasicInstruction Jsr b
-        _    -> undefined
+        _    -> error $ "Unknown non-basic opcode: " ++ prettifyWord16 aaaaaa
 
     -- Unknown instruction
-    _   -> undefined
+    _   -> error $ "unknown basic opcode: " ++ prettifyWord16 oooo
   where
     -- Word is of the form bbbbbbaaaaaaoooo
     oooo        = word .&. 0xf
@@ -104,6 +105,6 @@ parseOperand word
         0x1d -> OO
         0x1e -> ORamAtNextWord
         0x1f -> ONextWord
-        _    -> undefined  -- Unknown value
+        _    -> error $ "Unknown operand: " ++ prettifyWord16 word
   where
     reg = toEnum . fromIntegral
