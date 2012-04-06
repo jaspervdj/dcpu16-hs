@@ -19,14 +19,18 @@ parse filePath source = case P.parse statements filePath source of
     Left err -> error $ show err
     Right xs -> xs
 
--- | Length of an instruction (in words)
+-- | Can a value be used in short form?
+shortForm :: Word16 -> Bool
+shortForm = (<= 0x1f)
+
+-- | Exact length of an instruction (in words)
 instructionLength :: Instruction AValue -> Int
 instructionLength instruction = case instruction of
     BasicInstruction _ a b  -> 1 + valueLength a + valueLength b
     NonBasicInstruction _ a -> 1 + valueLength a
   where
     -- Extra words needed to encode value
-    valueLength (ALiteral _)                = 1
+    valueLength (ALiteral w)                = if shortForm w then 0 else 1
     valueLength (APLiteral _)               = 1
     valueLength (APLiteralPlusRegister _ _) = 1
     valueLength (ALabel _)                  = 1
@@ -47,7 +51,7 @@ makeOperand :: Map Label Int -> AValue -> (Operand, [Word16])
 makeOperand labels val = case val of
     (ARegister r)               -> (ORegister r, [])
     (APRegister r)              -> (OPRegister r, [])
-    (ALiteral w)                -> (ONextWord, [w])
+    (ALiteral w)                -> nextWordOrLiteral w
     (APLiteral w)               -> (OPNextWord, [w])
     (APLiteralPlusRegister w r) -> (OPNextWordPlusRegister r, [w])
     APop                        -> (OPop, [])
@@ -61,6 +65,11 @@ makeOperand labels val = case val of
     findLabel l = case M.lookup l labels of
         Nothing -> error $ "Unknown label: " ++ l
         Just i  -> fromIntegral i
+
+    -- Either put the literal in the next word, or embed it if it's small enough
+    nextWordOrLiteral w
+        | shortForm w = (OLiteral w, [])
+        | otherwise   = (ONextWord, [w])
 
 assembleInstruction :: Map Label Int
                     -> Instruction AValue

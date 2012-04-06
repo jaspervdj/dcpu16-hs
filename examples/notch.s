@@ -21,8 +21,7 @@
 :testsub      SHL X, 4                 ; 9037
               SET PC, POP              ; 61c1
                 
-; Hang forever. X should now be 0x40 if everything went right.
-:crash        SET PC, crash            ; 7dc1 001a [*]
-
-; [*]: Note that these can be one word shorter and one cycle faster by using the short form (0x00-0x1f) of literals,
-;      but my assembler doesn't support short form labels yet.
+; Make up a nonsensical instruction and jump there.
+; X should now be 0x40 if everything went right.
+:crash        SET [0x2000], 0x0
+              SET PC, 0x2000
