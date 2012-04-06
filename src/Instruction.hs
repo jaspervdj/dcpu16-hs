@@ -2,12 +2,14 @@ module Instruction
     ( BasicInstruction (..)
     , NonBasicInstruction (..)
     , Instruction (..)
-    , parseInstruction
+    , decodeInstruction
+    , encodeInstruction
     , Operand (..)
-    , parseOperand
+    , decodeOperand
+    , encodeOperand
     ) where
 
-import Data.Bits (shiftR, (.&.))
+import Data.Bits (shiftL, shiftR, (.&.), (.|.))
 import Data.Word (Word16)
 
 import Memory
@@ -40,8 +42,8 @@ data Instruction a
     | NonBasicInstruction NonBasicInstruction a
     deriving (Show)
 
-parseInstruction :: Word16 -> Instruction Operand
-parseInstruction word = case oooo of
+decodeInstruction :: Word16 -> Instruction Operand
+decodeInstruction word = case oooo of
     -- Basic instructions
     0x1 -> BasicInstruction Set a b
     0x2 -> BasicInstruction Add a b
@@ -71,30 +73,59 @@ parseInstruction word = case oooo of
     oooo        = word .&. 0xf
     aaaaaa      = (word `shiftR` 4)  .&. 0x3f
     bbbbbb      = (word `shiftR` 10) .&. 0x3f
-    a           = parseOperand aaaaaa
-    b           = parseOperand bbbbbb
+    a           = decodeOperand aaaaaa
+    b           = decodeOperand bbbbbb
+
+encodeInstruction :: Instruction Operand -> Word16
+encodeInstruction (BasicInstruction op a b) =
+    bbbbbb .|. aaaaaa .|. oooo
+  where
+    bbbbbb = encodeOperand b `shiftL` 10
+    aaaaaa = encodeOperand a `shiftL` 4
+    oooo   = case op of
+        Set -> 0x1
+        Add -> 0x2
+        Sub -> 0x3
+        Mul -> 0x4
+        Div -> 0x5
+        Mod -> 0x6
+        Shl -> 0x7
+        Shr -> 0x8
+        And -> 0x9
+        Bor -> 0xa
+        Xor -> 0xb
+        Ife -> 0xc
+        Ifn -> 0xd
+        Ifg -> 0xe
+        Ifb -> 0xf
+encodeInstruction (NonBasicInstruction op a) =
+    aaaaaa .|. oooo
+  where
+    aaaaaa = encodeOperand a `shiftL` 10
+    oooo   = (`shiftL` 4) $ case op of
+        Jsr -> 0x01
 
 data Operand
     = ORegister Register
-    | ORamAtRegister Register
-    | ORamAtNextWordPlusRegister Register
+    | OPRegister Register
+    | OPNextWordPlusRegister Register
+    | OLiteral Word16
     | OPop
     | OPeek
     | OPush
     | OSp
     | OPc
     | OO
-    | ORamAtNextWord
+    | OPNextWord
     | ONextWord
-    | OLiteral Word16
     deriving (Show)
 
 -- | Only looks at the 6 least significant bits
-parseOperand :: Word16 -> Operand
-parseOperand word
+decodeOperand :: Word16 -> Operand
+decodeOperand word
     | word <= 0x07 = ORegister $ reg word
-    | word <= 0x0f = ORamAtRegister $ reg $ word - 0x08
-    | word <= 0x17 = ORamAtNextWordPlusRegister $ reg $ word - 0x10
+    | word <= 0x0f = OPRegister $ reg $ word - 0x08
+    | word <= 0x17 = OPNextWordPlusRegister $ reg $ word - 0x10
     | word >= 0x20 = OLiteral $ word - 0x20
     | otherwise    = case word of
         0x18 -> OPop
@@ -103,8 +134,25 @@ parseOperand word
         0x1b -> OSp
         0x1c -> OPc
         0x1d -> OO
-        0x1e -> ORamAtNextWord
+        0x1e -> OPNextWord
         0x1f -> ONextWord
         _    -> error $ "Unknown operand: " ++ prettifyWord16 word
   where
     reg = toEnum . fromIntegral
+
+encodeOperand :: Operand -> Word16
+encodeOperand operand = case operand of
+    ORegister reg              -> unreg reg
+    OPRegister reg             -> 0x08 + unreg reg
+    OPNextWordPlusRegister reg -> 0x10 + unreg reg
+    OLiteral w                 -> 0x20 + w  -- TODO: check if w < 0x31?
+    OPop                       -> 0x18
+    OPeek                      -> 0x19
+    OPush                      -> 0x1a
+    OSp                        -> 0x1b
+    OPc                        -> 0x1c
+    OO                         -> 0x1d
+    OPNextWord                 -> 0x1e
+    ONextWord                  -> 0x1f
+  where
+    unreg = fromIntegral . fromEnum

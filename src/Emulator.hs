@@ -65,11 +65,11 @@ data Value
 loadOperand :: Operand -> EmulatorM s Value
 loadOperand (ORegister reg) =
     return $ Address $ Memory.register reg
-loadOperand (ORamAtRegister reg) = do
+loadOperand (OPRegister reg) = do
     mem  <- ask
     regv <- lift $ Memory.load mem (Memory.register reg)
     return $ Address $ Memory.ram regv
-loadOperand (ORamAtNextWordPlusRegister reg) = do
+loadOperand (OPNextWordPlusRegister reg) = do
     mem  <- ask
     nw   <- loadNextWord
     regv <- lift $ Memory.load mem (Memory.register reg)
@@ -94,7 +94,7 @@ loadOperand OPc =
     return $ Address $ Memory.pc
 loadOperand OO = do
     return $ Address $ Memory.o
-loadOperand ORamAtNextWord = do
+loadOperand OPNextWord = do
     nw <- loadNextWord
     return $ Address $ Memory.ram nw
 loadOperand ONextWord = do
@@ -122,7 +122,7 @@ step = do
     skip <- lift $ Memory.load mem Memory.skip
 
     -- Fetch and decode instruction
-    instruction <- parseInstruction <$> loadNextWord
+    instruction <- decodeInstruction <$> loadNextWord
 
     -- Fetch its operands
     instruction' <- case instruction of
