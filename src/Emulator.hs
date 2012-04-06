@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns, Rank2Types #-}
 module Emulator
     ( EmulatorM
+    , newEmulatorState
     , runEmulatorM
     , loadProgram
     , step
@@ -10,7 +11,7 @@ module Emulator
 import Control.Applicative ((<$>))
 import Control.Monad (forM)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
-import Control.Monad.ST (ST, runST)
+import Control.Monad.ST (ST)
 import Control.Monad.Trans (lift)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Word (Word, Word16)
@@ -23,13 +24,18 @@ import Memory (Address, Memory)
 import Util
 import qualified Memory as Memory
 
-type EmulatorM s = ReaderT (Memory s) (ST s)
+type EmulatorState s = Memory s
 
-runEmulatorM :: (forall s. EmulatorM s a) -> a
-runEmulatorM program = runST $ do
+newEmulatorState :: ST s (EmulatorState s)
+newEmulatorState = do
     mem <- Memory.new
     Memory.store mem Memory.sp 0xffff
-    runReaderT program mem
+    return mem
+
+type EmulatorM s = ReaderT (EmulatorState s) (ST s)
+
+runEmulatorM :: EmulatorM s a -> EmulatorState s -> ST s a
+runEmulatorM = runReaderT
 
 -- | Load a program from a bytestring
 loadProgram :: ByteString -> EmulatorM s ()
