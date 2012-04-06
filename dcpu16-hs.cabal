@@ -1,0 +1,26 @@
+Name:          dcpu16-hs
+Version:       0.0.0.1
+Synopsis:      Implementation of Notch's dcpu-16 CPU in Haskell
+Homepage:      https://github.com/jaspervdj/dcpu16-hs
+License:       BSD3
+License-file:  LICENSE
+Author:        Jasper Van der Jeugt <m@jaspervdj.be>
+Maintainer:    Jasper Van der Jeugt <m@jaspervdj.be>
+Category:      Development
+Build-type:    Simple
+Cabal-version: >= 1.2
+
+Executable dcpu16-hs
+  Ghc-options:    -Wall -fwarn-tabs
+  Hs-source-dirs: src
+  Main-is:        Main.hs
+  
+  Other-modules:       
+    Emulator
+    Instruction
+    Memory
+
+  Build-depends:       
+    base     >= 4   && < 5,
+    ghc-prim >= 0.2 && < 0.3,
+    mtl      >= 2.0 && < 2.1
