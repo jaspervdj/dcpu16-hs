@@ -33,7 +33,7 @@ data AValue
     deriving (Show)
 
 statements :: Parser [(Maybe Label, Instruction AValue)]
-statements = P.many statement
+statements = P.manyTill statement P.eof
 
 statement :: Parser (Maybe Label, Instruction AValue)
 statement = do
