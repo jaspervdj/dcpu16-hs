@@ -1,5 +1,6 @@
 module Assembler
-    ( parse
+    ( assembleFile
+    , parse
     , calculateLabels
     , instructions
     , assemble
@@ -10,10 +11,21 @@ import Data.Map (Map)
 import Data.Word (Word16)
 import qualified Data.Map as M
 
+import qualified Blaze.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Text.Parsec as P
 
 import Assembler.Parser
 import Instruction
+
+-- | Very high level
+assembleFile :: FilePath -> FilePath -> IO ()
+assembleFile fileIn fileOut = do
+    source <- readFile fileIn
+    let sts    = parse fileIn source
+        labels = calculateLabels sts
+        w16s   = assemble labels $ instructions sts
+    BL.writeFile fileOut $ B.toLazyByteString $ B.fromWord16sbe w16s
 
 parse :: FilePath -> String -> [Statement]
 parse filePath source = case P.parse statements filePath source of
