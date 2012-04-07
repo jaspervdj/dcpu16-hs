@@ -9,8 +9,8 @@ assembler and an emulator.
 Status
 ------
 
-We can assemble and compile at least Notch's example program, and this
-[fibonacci] example.
+We can assemble and run at least Notch's example program, this [fibonacci]
+example, and the stuff in `examples/`.
 
 [fibonacci]: https://github.com/jazzychad/dcpu-asm/blob/master/fib.d16
 
