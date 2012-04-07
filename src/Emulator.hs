@@ -5,6 +5,9 @@ module Emulator
     , runEmulatorM
     , loadProgram
     , step
+    , loadInstruction
+    , loadOperands
+    , execute
     , prettify
     ) where
 
@@ -122,34 +125,34 @@ storeValue (Address address) val = do
 storeValue (Literal _) _ = return ()
 
 step :: EmulatorM s ()
-step = do
-    -- Flag indicating if we should skip the next instruction
+step = loadInstruction >>= loadOperands >>= execute
+
+loadInstruction :: EmulatorM s (Instruction Operand)
+loadInstruction = decodeInstruction <$> loadNextWord
+
+loadOperands :: Instruction Operand -> EmulatorM s (Instruction Value)
+loadOperands (BasicInstruction op a b) = do
+    av <- loadOperand a
+    bv <- loadOperand b
+    return $ BasicInstruction op av bv
+loadOperands (NonBasicInstruction op a) = do
+    av <- loadOperand a
+    return $ NonBasicInstruction op av
+
+execute :: Instruction Value -> EmulatorM s ()
+execute instruction = do
     mem  <- ask
     skip <- lift $ Memory.load mem Memory.skip
 
-    -- Fetch and decode instruction
-    instruction <- decodeInstruction <$> loadNextWord
-
-    -- Fetch its operands
-    instruction' <- case instruction of
-        BasicInstruction op a b -> do
-            av <- loadOperand a
-            bv <- loadOperand b
-            return $ BasicInstruction op av bv
-        NonBasicInstruction op a -> do
-            av <- loadOperand a
-            return $ NonBasicInstruction op av
-
-    -- Execute instruction if needed
     if (skip == 0x0000)
-        then execute instruction'
+        then execute' instruction
         else lift $ Memory.store mem Memory.skip 0x0000
 
-execute :: Instruction Value -> EmulatorM s ()
-execute (BasicInstruction Set a b) = do
+execute' :: Instruction Value -> EmulatorM s ()
+execute' (BasicInstruction Set a b) = do
     x <- loadValue b
     storeValue a x
-execute (BasicInstruction Add a b) = do
+execute' (BasicInstruction Add a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -157,7 +160,7 @@ execute (BasicInstruction Add a b) = do
         overflow = x' + y' > (0xffff :: Int)
     storeValue a (x + y)
     lift $ Memory.store mem Memory.o (if overflow then 0x0001 else 0x0000)
-execute (BasicInstruction Sub a b) = do
+execute' (BasicInstruction Sub a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -165,7 +168,7 @@ execute (BasicInstruction Sub a b) = do
         underflow = x' - y' < (0x0000 :: Int)
     storeValue a (x - y)
     lift $ Memory.store mem Memory.o (if underflow then 0xffff else 0x0000)
-execute (BasicInstruction Mul a b) = do
+execute' (BasicInstruction Mul a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -173,7 +176,7 @@ execute (BasicInstruction Mul a b) = do
         overflow = ((x' * y') `shiftR` 16) .&. 0xffff :: Word
     storeValue a (x * y)
     lift $ Memory.store mem Memory.o (fromIntegral overflow)
-execute (BasicInstruction Div a b) = do
+execute' (BasicInstruction Div a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -186,13 +189,13 @@ execute (BasicInstruction Div a b) = do
                 overflow = ((x' `shiftL` 16) `div` y') .&. 0xffff :: Word
             storeValue a (x `div` y)
             lift $ Memory.store mem Memory.o (fromIntegral overflow)
-execute (BasicInstruction Mod a b) = do
+execute' (BasicInstruction Mod a b) = do
     x <- loadValue a
     y <- loadValue b
     if y == 0x0000
         then storeValue a 0x0000
         else storeValue a (x `mod` y)
-execute (BasicInstruction Shl a b) = do
+execute' (BasicInstruction Shl a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -200,7 +203,7 @@ execute (BasicInstruction Shl a b) = do
         overflow = ((x' `shiftL` y') `shiftR` 16) .&. 0xffff :: Word
     storeValue a (x `shiftL` y')
     lift $ Memory.store mem Memory.o (fromIntegral overflow)
-execute (BasicInstruction Shr a b) = do
+execute' (BasicInstruction Shr a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
@@ -208,46 +211,46 @@ execute (BasicInstruction Shr a b) = do
         overflow = ((x' `shiftL` 16) `shiftR` y') .&. 0xffff :: Word
     storeValue a (x `shiftR` y')
     lift $ Memory.store mem Memory.o (fromIntegral overflow)
-execute (BasicInstruction And a b) = do
+execute' (BasicInstruction And a b) = do
     x <- loadValue a
     y <- loadValue b
     storeValue a (x .&. y)
-execute (BasicInstruction Bor a b) = do
+execute' (BasicInstruction Bor a b) = do
     x <- loadValue a
     y <- loadValue b
     storeValue a (x .|. y)
-execute (BasicInstruction Xor a b) = do
+execute' (BasicInstruction Xor a b) = do
     x <- loadValue a
     y <- loadValue b
     storeValue a (xor x y)
-execute (BasicInstruction Ife a b) = do
+execute' (BasicInstruction Ife a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
     lift $ Memory.store mem Memory.skip (if x == y then 0x0000 else 0x0001)
-execute (BasicInstruction Ifn a b) = do
+execute' (BasicInstruction Ifn a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
     lift $ Memory.store mem Memory.skip (if x /= y then 0x0000 else 0x0001)
-execute (BasicInstruction Ifg a b) = do
+execute' (BasicInstruction Ifg a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
     lift $ Memory.store mem Memory.skip (if x > y then 0x0000 else 0x0001)
-execute (BasicInstruction Ifb a b) = do
+execute' (BasicInstruction Ifb a b) = do
     mem <- ask
     x   <- loadValue a
     y   <- loadValue b
     lift $ Memory.store mem Memory.skip $
         if (x .&. y) == 0 then 0x0000 else 0x0001
-execute (NonBasicInstruction Jsr a) = do
+execute' (NonBasicInstruction Jsr a) = do
     mem  <- ask
     pcv  <- lift $ Memory.load mem Memory.pc
     x    <- loadValue a
     addr <- loadOperand OPush
-    execute $ BasicInstruction Set addr (Literal pcv)  -- Push address on stack
-    lift $ Memory.store mem Memory.pc x                -- Set PC to a (jump)
+    execute' $ BasicInstruction Set addr (Literal pcv)  -- Push address on stack
+    lift $ Memory.store mem Memory.pc x                 -- Set PC to a (jump)
 
 prettify :: EmulatorM s String
 prettify = unlines . concat <$>
