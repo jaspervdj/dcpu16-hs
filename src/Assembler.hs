@@ -1,6 +1,7 @@
 module Assembler
     ( parse
     , calculateLabels
+    , instructions
     , assemble
     ) where
 
@@ -14,7 +15,7 @@ import qualified Text.Parsec as P
 import Assembler.Parser
 import Instruction
 
-parse :: FilePath -> String -> [(Maybe Label, Instruction AValue)]
+parse :: FilePath -> String -> [Statement]
 parse filePath source = case P.parse statements filePath source of
     Left err -> error $ show err
     Right xs -> xs
@@ -36,16 +37,17 @@ instructionLength instruction = case instruction of
     valueLength (ALabel _)                  = 1
     valueLength _                           = 0
 
-calculateLabels :: [(Maybe Label, Instruction AValue)] -> Map Label Int
+calculateLabels :: [Statement] -> Map Label Int
 calculateLabels = snd . foldl' step (0, M.empty)
   where
-    step (i, labels) (label, instr) = case label of
-        Nothing                   -> (i', labels)
-        Just l
-            | l `M.member` labels -> error $ "Duplicate label: " ++ l
-            | otherwise           -> (i', M.insert l i labels)
-      where
-        i' = i + instructionLength instr
+    step (i, ls) statement = case statement of
+        Instruction instr     -> (i + instructionLength instr, ls)
+        Label l
+            | l `M.member` ls -> error $ "Duplicate label: " ++ l
+            | otherwise       -> (i, M.insert l i ls)
+
+instructions :: [Statement] -> [Instruction AValue]
+instructions sts = [instr | Instruction instr <- sts]
 
 makeOperand :: Map Label Int -> AValue -> (Operand, [Word16])
 makeOperand labels val = case val of

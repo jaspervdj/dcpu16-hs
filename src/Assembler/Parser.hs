@@ -1,5 +1,6 @@
 module Assembler.Parser
-    ( Label
+    ( Statement (..)
+    , Label
     , AValue (..)
     , statements
     ) where
@@ -14,6 +15,11 @@ import Text.Parsec.String (Parser)
 
 import Instruction
 import Memory (Register (..))
+
+data Statement
+    = Instruction (Instruction AValue)
+    | Label Label
+    deriving (Show)
 
 type Label = String
 
@@ -32,17 +38,15 @@ data AValue
     | ALabel Label
     deriving (Show)
 
-statements :: Parser [(Maybe Label, Instruction AValue)]
+statements :: Parser [Statement]
 statements = P.manyTill statement P.eof
 
-statement :: Parser (Maybe Label, Instruction AValue)
+statement :: Parser Statement
 statement = do
     P.skipMany $ P.choice [void (P.space), void comment]
-    label'       <- P.option Nothing $ fmap Just label
+    s <- (Label <$> P.try label) <|> (Instruction <$> P.try instruction)
     P.skipMany $ P.choice [void (P.space), void comment]
-    instruction' <- instruction
-    P.skipMany $ P.choice [void (P.space), void comment]
-    return (label', instruction')
+    return s
 
 comment :: Parser String
 comment = (:)

@@ -15,9 +15,9 @@ main = do
     case args of
         [x] -> do
             source <- readFile x
-            let instrs = parse x source
-                labels = calculateLabels instrs
-                w16s   = assemble labels $ map snd instrs
+            let statements = parse x source
+                labels     = calculateLabels statements
+                w16s       = assemble labels $ instructions statements
             BL.writeFile "a.out" $ B.toLazyByteString $ B.fromWord16sbe w16s
         _   -> do
             putStr $ "Usage: " ++ progName ++ " <assembler file>"
