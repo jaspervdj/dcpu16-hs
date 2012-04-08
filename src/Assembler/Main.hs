@@ -10,7 +10,7 @@ main = do
     progName <- getProgName
     args     <- getArgs
     case args of
-        [x] -> assembleFile "a.out" x
+        [x] -> assembleFile x "a.out"
         _   -> do
             putStr $ "Usage: " ++ progName ++ " <assembler file>"
             exitFailure

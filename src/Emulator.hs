@@ -4,7 +4,7 @@ module Emulator
     , newEmulatorState
     , runEmulatorM
     , loadProgram
-    , step
+    , emulate
     , loadInstruction
     , loadOperands
     , execute
@@ -124,8 +124,15 @@ storeValue (Address address) val = do
     lift $ Memory.store mem address val
 storeValue (Literal _) _ = return ()
 
-step :: EmulatorM s ()
-step = loadInstruction >>= loadOperands >>= execute
+-- | Stops when an unknown instruction is encountered
+emulate :: EmulatorM s ()
+emulate = do
+    instr <- loadInstruction
+    case instr of
+        UnknownInstruction _ -> return ()
+        _                    -> do
+            loadOperands instr >>= execute
+            emulate
 
 loadInstruction :: EmulatorM s (Instruction Operand)
 loadInstruction = decodeInstruction <$> loadNextWord
@@ -138,6 +145,8 @@ loadOperands (BasicInstruction op a b) = do
 loadOperands (NonBasicInstruction op a) = do
     av <- loadOperand a
     return $ NonBasicInstruction op av
+loadOperands (UnknownInstruction w) =
+    return $ UnknownInstruction w
 
 execute :: Instruction Value -> EmulatorM s ()
 execute instruction = do
@@ -251,6 +260,8 @@ execute' (NonBasicInstruction Jsr a) = do
     addr <- loadOperand OPush
     execute' $ BasicInstruction Set addr (Literal pcv)  -- Push address on stack
     lift $ Memory.store mem Memory.pc x                 -- Set PC to a (jump)
+execute' (UnknownInstruction _) =
+    return ()
 
 prettify :: EmulatorM s String
 prettify = unlines . concat <$>

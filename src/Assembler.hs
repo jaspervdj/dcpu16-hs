@@ -41,6 +41,7 @@ instructionLength :: Instruction AValue -> Int
 instructionLength instruction = case instruction of
     BasicInstruction _ a b  -> 1 + valueLength a + valueLength b
     NonBasicInstruction _ a -> 1 + valueLength a
+    UnknownInstruction _    -> 0
   where
     -- Extra words needed to encode value
     valueLength (ALiteral w)                = if shortForm w then 0 else 1
@@ -96,6 +97,7 @@ assembleInstruction labels instruction = case instruction of
     (NonBasicInstruction op a) ->
         let (oa, w1) = makeOperand labels a
         in [encodeInstruction (NonBasicInstruction op oa)] ++ w1
+    UnknownInstruction _       -> []
 
 assemble :: Map Label Int -> [Instruction AValue] -> [Word16]
 assemble labels = concatMap (assembleInstruction labels)

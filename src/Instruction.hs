@@ -40,6 +40,7 @@ data NonBasicInstruction
 data Instruction a
     = BasicInstruction BasicInstruction a a
     | NonBasicInstruction NonBasicInstruction a
+    | UnknownInstruction Word16
     deriving (Show)
 
 decodeInstruction :: Word16 -> Instruction Operand
@@ -64,10 +65,10 @@ decodeInstruction word = case oooo of
     -- Non-basic instructions
     0x0 -> case aaaaaa of
         0x01 -> NonBasicInstruction Jsr b
-        _    -> error $ "Unknown non-basic opcode: " ++ prettifyWord16 aaaaaa
+        _    -> UnknownInstruction word
 
     -- Unknown instruction
-    _   -> error $ "unknown basic opcode: " ++ prettifyWord16 oooo
+    _   -> UnknownInstruction word
   where
     -- Word is of the form bbbbbbaaaaaaoooo
     oooo        = word .&. 0xf
@@ -104,6 +105,7 @@ encodeInstruction (NonBasicInstruction op a) =
     aaaaaa = encodeOperand a `shiftL` 10
     oooo   = (`shiftL` 4) $ case op of
         Jsr -> 0x01
+encodeInstruction (UnknownInstruction word) = word
 
 data Operand
     = ORegister Register
