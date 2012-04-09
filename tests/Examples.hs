@@ -4,6 +4,7 @@ module Examples
     ) where
 
 import Control.Monad (forM)
+import Data.Bits (shiftL)
 import Data.List (sort)
 
 import Test.Framework (Test, testGroup)
@@ -31,6 +32,12 @@ tests = testGroup "Examples"
     , testCase "bubble-sort.s" $ example "examples/bubble-sort.s" $ do
         xs <- forM [0 .. 9] $ load . Memory.ram . (0x1000 +)
         return $ sort xs @=? xs
+
+    , testCase "32-bit-add.s" $ example "examples/32-bit-add.s" $ do
+        lo <- load $ Memory.ram 0x1000
+        hi <- load $ Memory.ram 0x1001
+        let sum' = (fromIntegral hi `shiftL` 16) + fromIntegral lo :: Int
+        return $ 0x12345678 + 0xaabbccdd @=? sum'
     ]
 
 example :: FilePath
