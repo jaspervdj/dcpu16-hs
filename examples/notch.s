@@ -23,5 +23,6 @@
                 
 ; Make up a nonsensical instruction and jump there.
 ; X should now be 0x40 if everything went right.
+; Additionally, 106 cycles should have been consumed.
 :crash        SET [0x2000], 0x0
               SET PC, 0x2000

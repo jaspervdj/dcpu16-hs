@@ -21,8 +21,9 @@ import qualified Memory as Memory
 tests :: Test
 tests = testGroup "Examples"
     [ testCase "notch.s" $ example "examples/notch.s" $ \mem -> do
-        x <- Memory.load mem $ Memory.register Memory.X
-        return $ 0x40 @=? x
+        x      <- Memory.load mem $ Memory.register Memory.X
+        cycles <- Memory.load mem Memory.cycles
+        return $ (0x40, 106) @=? (x, cycles)
 
     , testCase "sum-squares.s" $ example "examples/sum-squares.s" $ \mem -> do
         x <- Memory.load mem $ Memory.register Memory.X
