@@ -7,7 +7,6 @@ module Emulator.Monad
     , runSTEmulator
     ) where
 
-import Control.Applicative (Applicative)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.ST (ST, runST)
 import Control.Monad.Trans (lift)
@@ -16,12 +15,12 @@ import Data.Word (Word16)
 import Memory (Address, Memory)
 import qualified Memory as Memory
 
-class (Applicative m, Functor m, Monad m) => MonadEmulator m where
+class (Functor m, Monad m) => MonadEmulator m where
     load  :: Address -> m Word16
     store :: Address -> Word16 -> m ()
 
 newtype STEmulator s a = STEmulator (ReaderT (Memory s) (ST s) a)
-    deriving (Applicative, Functor, Monad)
+    deriving (Functor, Monad)
 
 instance MonadEmulator (STEmulator s) where
     load address = STEmulator $ do
