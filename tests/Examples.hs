@@ -14,6 +14,7 @@ import qualified Data.ByteString as B
 import Assembler
 import Emulator
 import Emulator.Monad
+import Emulator.Monad.ST
 import qualified Memory as Memory
 
 tests :: Test

@@ -7,7 +7,7 @@ import System.Exit (exitFailure)
 import qualified Data.ByteString as B
 
 import Emulator
-import Emulator.Monad
+import Emulator.Monad.ST
 
 main :: IO ()
 main = do

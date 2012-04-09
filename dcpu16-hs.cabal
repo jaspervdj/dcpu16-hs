@@ -17,6 +17,8 @@ Executable dcpu16-emulator
   
   Other-modules:       
     Emulator
+    Emulator.Monad
+    Emulator.Monad.ST
     Instruction
     Memory
     Util
