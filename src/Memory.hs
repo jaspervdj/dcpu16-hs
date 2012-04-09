@@ -29,7 +29,17 @@ data Memory s = Memory (MutableByteArray# s)
 type Address = Int
 
 new :: ST s (Memory s)
-new = ST $ \s1# ->
+new = do
+    mem <- new'
+    store mem pc     0x0000
+    store mem sp     0xffff
+    store mem o      0x0000
+    store mem skip   0x0000
+    store mem cycles 0x0000
+    return mem
+
+new' :: ST s (Memory s)
+new' = ST $ \s1# ->
     case newByteArray# (len# *# 2#) s1# of
         (# s2#, marr# #) -> (# s2#, Memory marr# #)
   where

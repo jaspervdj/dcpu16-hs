@@ -1,9 +1,6 @@
 {-# LANGUAGE BangPatterns, Rank2Types #-}
 module Emulator
-    ( EmulatorM
-    , newEmulatorState
-    , runEmulatorM
-    , loadProgram
+    ( loadProgram
     , emulate
     , loadInstruction
     , loadOperands
@@ -13,39 +10,20 @@ module Emulator
 
 import Control.Applicative ((<$>))
 import Control.Monad (forM)
-import Control.Monad.Reader (ReaderT, ask, runReaderT)
-import Control.Monad.ST (ST)
-import Control.Monad.Trans (lift)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Word (Word, Word16)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
+import Emulator.Monad
 import Instruction
-import Memory (Address, Memory)
+import Memory (Address)
 import Util
 import qualified Memory as Memory
 
-type EmulatorState s = Memory s
-
-newEmulatorState :: ST s (EmulatorState s)
-newEmulatorState = do
-    mem <- Memory.new
-    Memory.store mem Memory.pc     0x0000
-    Memory.store mem Memory.sp     0xffff
-    Memory.store mem Memory.o      0x0000
-    Memory.store mem Memory.skip   0x0000
-    Memory.store mem Memory.cycles 0x0000
-    return mem
-
-type EmulatorM s = ReaderT (EmulatorState s) (ST s)
-
-runEmulatorM :: EmulatorM s a -> EmulatorState s -> ST s a
-runEmulatorM = runReaderT
-
 -- | Load a program from a bytestring
-loadProgram :: ByteString -> EmulatorM s ()
+loadProgram :: MonadEmulator m => ByteString -> m ()
 loadProgram bs = loop 0
   where
     len = B.length bs
@@ -56,23 +34,20 @@ loadProgram bs = loop 0
                 !b2   = fromIntegral $ B.index bs (i + 1)
                 !w16  = (b1 `shiftL` 8) + b2
                 !addr = fromIntegral $ i `div` 2
-            mem <- ask
-            lift $ Memory.store mem (Memory.ram addr) w16
+            store (Memory.ram addr) w16
             loop (i + 2)
 
-loadNextWord :: EmulatorM s Word16
+loadNextWord :: MonadEmulator m => m Word16
 loadNextWord = do
-    mem <- ask
-    pc  <- lift $ Memory.load mem Memory.pc
-    pcv <- lift $ Memory.load mem (Memory.ram pc)
-    lift $ Memory.store mem Memory.pc (pc + 1)
+    pc  <- load Memory.pc
+    pcv <- load (Memory.ram pc)
+    store Memory.pc (pc + 1)
     return pcv
 
-addCycles :: Int -> EmulatorM s ()
+addCycles :: MonadEmulator m => Int -> m ()
 addCycles c = do
-    mem    <- ask
-    cycles <- lift $ Memory.load mem Memory.cycles
-    lift $ Memory.store mem Memory.cycles (cycles + fromIntegral c)
+    cycles <- load Memory.cycles
+    store Memory.cycles (cycles + fromIntegral c)
 
 -- | After we load an operand, we get a value. This is either an address (we
 -- can write back to) or a literal value.
@@ -81,31 +56,26 @@ data Value
     | Literal Word16
     deriving (Show)
 
-loadOperand :: Operand -> EmulatorM s Value
+loadOperand :: MonadEmulator m => Operand -> m Value
 loadOperand (ORegister reg) =
     return $ Address $ Memory.register reg
 loadOperand (OPRegister reg) = do
-    mem  <- ask
-    regv <- lift $ Memory.load mem (Memory.register reg)
+    regv <- load (Memory.register reg)
     return $ Address $ Memory.ram regv
 loadOperand (OPNextWordPlusRegister reg) = do
-    mem  <- ask
     nw   <- loadNextWord
-    regv <- lift $ Memory.load mem (Memory.register reg)
+    regv <- load (Memory.register reg)
     return $ Address $ Memory.ram $ nw + regv
 loadOperand OPop = do
-    mem <- ask
-    sp  <- lift $ Memory.load mem Memory.sp
-    lift $ Memory.store mem Memory.sp (sp + 1)
+    sp  <- load Memory.sp
+    store Memory.sp (sp + 1)
     return $ Address $ Memory.ram sp
 loadOperand OPeek = do
-    mem <- ask
-    sp  <- lift $ Memory.load mem Memory.sp
+    sp  <- load Memory.sp
     return $ Address $ Memory.ram sp
 loadOperand OPush = do
-    mem <- ask
-    sp' <- fmap (flip (-) 1) $ lift $ Memory.load mem Memory.sp
-    lift $ Memory.store mem Memory.sp sp'
+    sp' <- fmap (flip (-) 1) $ load Memory.sp
+    store Memory.sp sp'
     return $ Address $ Memory.ram sp'
 loadOperand OSp =
     return $ Address $ Memory.sp
@@ -122,20 +92,16 @@ loadOperand ONextWord = do
 loadOperand (OLiteral w) =
     return $ Literal w
 
-loadValue :: Value -> EmulatorM s Word16
-loadValue (Address address) = do
-    mem <- ask
-    lift $ Memory.load mem address
-loadValue (Literal w) = return w
+loadValue :: MonadEmulator m => Value -> m Word16
+loadValue (Address address) = load address
+loadValue (Literal w)       = return w
 
-storeValue :: Value -> Word16 -> EmulatorM s ()
-storeValue (Address address) val = do
-    mem <- ask
-    lift $ Memory.store mem address val
-storeValue (Literal _) _ = return ()
+storeValue :: MonadEmulator m => Value -> Word16 -> m ()
+storeValue (Address address) val = store address val
+storeValue (Literal _)       _   = return ()
 
 -- | Stops when an unknown instruction is encountered
-emulate :: EmulatorM s ()
+emulate :: MonadEmulator m => m ()
 emulate = do
     instr <- loadInstruction
     case instr of
@@ -144,10 +110,10 @@ emulate = do
             loadOperands instr >>= execute instr
             emulate
 
-loadInstruction :: EmulatorM s (Instruction Operand)
+loadInstruction :: MonadEmulator m => m (Instruction Operand)
 loadInstruction = decodeInstruction <$> loadNextWord
 
-loadOperands :: Instruction Operand -> EmulatorM s (Instruction Value)
+loadOperands :: MonadEmulator m => Instruction Operand -> m (Instruction Value)
 loadOperands (BasicInstruction op a b) = do
     av <- loadOperand a
     bv <- loadOperand b
@@ -158,60 +124,54 @@ loadOperands (NonBasicInstruction op a) = do
 loadOperands (UnknownInstruction w) =
     return $ UnknownInstruction w
 
-execute :: Instruction Operand -> Instruction Value -> EmulatorM s ()
+execute :: MonadEmulator m => Instruction Operand -> Instruction Value -> m ()
 execute instr instr' = do
-    mem  <- ask
-    skip <- lift $ Memory.load mem Memory.skip
-
+    skip <- load Memory.skip
     if (skip == 0x0000)
         then do
             execute' instr'
             addCycles $ instructionCycles instr
         else do
-            lift $ Memory.store mem Memory.skip 0x0000
+            store Memory.skip 0x0000
             addCycles 1
 
-execute' :: Instruction Value -> EmulatorM s ()
+execute' :: MonadEmulator m => Instruction Value -> m ()
 execute' (BasicInstruction Set a b) = do
     x <- loadValue b
     storeValue a x
 execute' (BasicInstruction Add a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     let (x', y') = (fromIntegral x, fromIntegral y)
         overflow = x' + y' > (0xffff :: Int)
     storeValue a (x + y)
-    lift $ Memory.store mem Memory.o (if overflow then 0x0001 else 0x0000)
+    store Memory.o (if overflow then 0x0001 else 0x0000)
 execute' (BasicInstruction Sub a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     let (x', y')  = (fromIntegral x, fromIntegral y)
         underflow = x' - y' < (0x0000 :: Int)
     storeValue a (x - y)
-    lift $ Memory.store mem Memory.o (if underflow then 0xffff else 0x0000)
+    store Memory.o (if underflow then 0xffff else 0x0000)
 execute' (BasicInstruction Mul a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     let (x', y') = (fromIntegral x, fromIntegral y)
         overflow = ((x' * y') `shiftR` 16) .&. 0xffff :: Word
     storeValue a (x * y)
-    lift $ Memory.store mem Memory.o (fromIntegral overflow)
+    store Memory.o (fromIntegral overflow)
 execute' (BasicInstruction Div a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     if y == 0x0000
         then do
             storeValue a 0x0000
-            lift $ Memory.store mem Memory.o 0x0000
+            store Memory.o 0x0000
         else do
             let (x', y') = (fromIntegral x, fromIntegral y)
                 overflow = ((x' `shiftL` 16) `div` y') .&. 0xffff :: Word
             storeValue a (x `div` y)
-            lift $ Memory.store mem Memory.o (fromIntegral overflow)
+            store Memory.o (fromIntegral overflow)
 execute' (BasicInstruction Mod a b) = do
     x <- loadValue a
     y <- loadValue b
@@ -219,21 +179,19 @@ execute' (BasicInstruction Mod a b) = do
         then storeValue a 0x0000
         else storeValue a (x `mod` y)
 execute' (BasicInstruction Shl a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     let (x', y') = (fromIntegral x, fromIntegral y)
         overflow = ((x' `shiftL` y') `shiftR` 16) .&. 0xffff :: Word
     storeValue a (x `shiftL` y')
-    lift $ Memory.store mem Memory.o (fromIntegral overflow)
+    store Memory.o (fromIntegral overflow)
 execute' (BasicInstruction Shr a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
+    x <- loadValue a
+    y <- loadValue b
     let (x', y') = (fromIntegral x, fromIntegral y)
         overflow = ((x' `shiftL` 16) `shiftR` y') .&. 0xffff :: Word
     storeValue a (x `shiftR` y')
-    lift $ Memory.store mem Memory.o (fromIntegral overflow)
+    store Memory.o (fromIntegral overflow)
 execute' (BasicInstruction And a b) = do
     x <- loadValue a
     y <- loadValue b
@@ -247,48 +205,41 @@ execute' (BasicInstruction Xor a b) = do
     y <- loadValue b
     storeValue a (xor x y)
 execute' (BasicInstruction Ife a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
-    lift $ Memory.store mem Memory.skip (if x == y then 0x0000 else 0x0001)
+    x <- loadValue a
+    y <- loadValue b
+    store Memory.skip (if x == y then 0x0000 else 0x0001)
 execute' (BasicInstruction Ifn a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
-    lift $ Memory.store mem Memory.skip (if x /= y then 0x0000 else 0x0001)
+    x <- loadValue a
+    y <- loadValue b
+    store Memory.skip (if x /= y then 0x0000 else 0x0001)
 execute' (BasicInstruction Ifg a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
-    lift $ Memory.store mem Memory.skip (if x > y then 0x0000 else 0x0001)
+    x <- loadValue a
+    y <- loadValue b
+    store Memory.skip (if x > y then 0x0000 else 0x0001)
 execute' (BasicInstruction Ifb a b) = do
-    mem <- ask
-    x   <- loadValue a
-    y   <- loadValue b
-    lift $ Memory.store mem Memory.skip $
-        if (x .&. y) == 0 then 0x0000 else 0x0001
+    x <- loadValue a
+    y <- loadValue b
+    store Memory.skip $ if (x .&. y) == 0 then 0x0000 else 0x0001
 execute' (NonBasicInstruction Jsr a) = do
-    mem  <- ask
-    pcv  <- lift $ Memory.load mem Memory.pc
+    pcv  <- load Memory.pc
     x    <- loadValue a
     addr <- loadOperand OPush
     execute' $ BasicInstruction Set addr (Literal pcv)  -- Push address on stack
-    lift $ Memory.store mem Memory.pc x                 -- Set PC to a (jump)
+    store Memory.pc x                                   -- Set PC to a (jump)
 execute' (UnknownInstruction _) =
     return ()
 
-prettify :: EmulatorM s String
+prettify :: MonadEmulator m => m String
 prettify = unlines . concat <$>
     sequence [prettifyEmulator, prettifyRegister, prettifyRam]
 
-prettifyEmulator :: EmulatorM s [String]
+prettifyEmulator :: MonadEmulator m => m [String]
 prettifyEmulator = do
-    mem    <- ask
-    pc     <- lift $ Memory.load mem Memory.pc
-    sp     <- lift $ Memory.load mem Memory.sp
-    o      <- lift $ Memory.load mem Memory.o
-    skip   <- lift $ Memory.load mem Memory.skip
-    cycles <- lift $ Memory.load mem Memory.cycles
+    pc     <- load Memory.pc
+    sp     <- load Memory.sp
+    o      <- load Memory.o
+    skip   <- load Memory.skip
+    cycles <- load Memory.cycles
     return $
         [ "EMULATOR"
         , ""
@@ -300,23 +251,21 @@ prettifyEmulator = do
         , ""
         ]
 
-prettifyRegister :: EmulatorM s [String]
+prettifyRegister :: MonadEmulator m => m [String]
 prettifyRegister = do
-    mem <- ask
-    registers   <- forM [minBound .. maxBound] $ \name -> do
-        val <- lift $ Memory.load mem (Memory.register name)
+    registers <- forM [minBound .. maxBound] $ \name -> do
+        val <- load (Memory.register name)
         return (name, val)
     return $
         ["REGISTER", ""] ++
         [show name ++ ": " ++ prettifyWord16 val | (name, val) <- registers] ++
         [""]
 
-prettifyRam :: EmulatorM s [String]
+prettifyRam :: MonadEmulator m => m [String]
 prettifyRam = do
     ls <- mapM line [(x * 8, x * 8 + 7) | x <- [0 .. 0xffff `div` 8]]
     return $ ["RAM", ""] ++ ls ++ [""]
   where
     line (lo, up) = do
-        mem  <- ask
-        vals <- mapM (lift . Memory.load mem . Memory.ram) [lo .. up]
+        vals <- mapM (load . Memory.ram) [lo .. up]
         return $ prettifyWord16 lo ++ ": " ++ unwords (map prettifyWord16 vals)
