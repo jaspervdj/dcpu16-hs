@@ -12,6 +12,8 @@ module Memory
     , sp
     , o
     , skip
+    , cycles
+
     , Register (..)
     , register
     , ram
@@ -31,7 +33,7 @@ new = ST $ \s1# ->
     case newByteArray# (len# *# 2#) s1# of
         (# s2#, marr# #) -> (# s2#, Memory marr# #)
   where
-    !(I# len#) = 0x4 + 0x8 + 0x10000
+    !(I# len#) = 0x8 + 0x8 + 0x10000
 
 load :: Memory s -> Address -> ST s Word16
 load (Memory marr#) (I# i#) = ST $ \s1# ->
@@ -55,11 +57,14 @@ o = 0x2
 skip :: Address
 skip = 0x3
 
+cycles :: Address
+cycles = 0x4
+
 data Register = A | B | C | X | Y | Z | I | J
     deriving (Bounded, Enum, Show)
 
 register :: Register -> Address
-register reg = fromEnum reg + 0x4
+register reg = fromEnum reg + 0x8
 
 ram :: Word16 -> Address
-ram (W16# ra#) = I# (word2Int# ra# +# 0x4# +# 0x8#)
+ram (W16# ra#) = I# (word2Int# ra# +# 0x8# +# 0x8#)

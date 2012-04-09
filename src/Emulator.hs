@@ -32,7 +32,11 @@ type EmulatorState s = Memory s
 newEmulatorState :: ST s (EmulatorState s)
 newEmulatorState = do
     mem <- Memory.new
-    Memory.store mem Memory.sp 0xffff
+    Memory.store mem Memory.pc     0x0000
+    Memory.store mem Memory.sp     0xffff
+    Memory.store mem Memory.o      0x0000
+    Memory.store mem Memory.skip   0x0000
+    Memory.store mem Memory.cycles 0x0000
     return mem
 
 type EmulatorM s = ReaderT (EmulatorState s) (ST s)
@@ -63,6 +67,12 @@ loadNextWord = do
     pcv <- lift $ Memory.load mem (Memory.ram pc)
     lift $ Memory.store mem Memory.pc (pc + 1)
     return pcv
+
+addCycles :: Int -> EmulatorM s ()
+addCycles c = do
+    mem    <- ask
+    cycles <- lift $ Memory.load mem Memory.cycles
+    lift $ Memory.store mem Memory.cycles (cycles + fromIntegral c)
 
 -- | After we load an operand, we get a value. This is either an address (we
 -- can write back to) or a literal value.
@@ -131,7 +141,7 @@ emulate = do
     case instr of
         UnknownInstruction _ -> return ()
         _                    -> do
-            loadOperands instr >>= execute
+            loadOperands instr >>= execute instr
             emulate
 
 loadInstruction :: EmulatorM s (Instruction Operand)
@@ -148,14 +158,18 @@ loadOperands (NonBasicInstruction op a) = do
 loadOperands (UnknownInstruction w) =
     return $ UnknownInstruction w
 
-execute :: Instruction Value -> EmulatorM s ()
-execute instruction = do
+execute :: Instruction Operand -> Instruction Value -> EmulatorM s ()
+execute instr instr' = do
     mem  <- ask
     skip <- lift $ Memory.load mem Memory.skip
 
     if (skip == 0x0000)
-        then execute' instruction
-        else lift $ Memory.store mem Memory.skip 0x0000
+        then do
+            execute' instr'
+            addCycles $ instructionCycles instr
+        else do
+            lift $ Memory.store mem Memory.skip 0x0000
+            addCycles 1
 
 execute' :: Instruction Value -> EmulatorM s ()
 execute' (BasicInstruction Set a b) = do
@@ -269,18 +283,20 @@ prettify = unlines . concat <$>
 
 prettifyEmulator :: EmulatorM s [String]
 prettifyEmulator = do
-    mem  <- ask
-    pc   <- lift $ Memory.load mem Memory.pc
-    sp   <- lift $ Memory.load mem Memory.sp
-    o    <- lift $ Memory.load mem Memory.o
-    skip <- lift $ Memory.load mem Memory.skip
+    mem    <- ask
+    pc     <- lift $ Memory.load mem Memory.pc
+    sp     <- lift $ Memory.load mem Memory.sp
+    o      <- lift $ Memory.load mem Memory.o
+    skip   <- lift $ Memory.load mem Memory.skip
+    cycles <- lift $ Memory.load mem Memory.cycles
     return $
         [ "EMULATOR"
         , ""
-        , "PC:   " ++ prettifyWord16 pc
-        , "SP:   " ++ prettifyWord16 sp
-        , "O:    " ++ prettifyWord16 o
-        , "SKIP: " ++ prettifyWord16 skip
+        , "PC:     " ++ prettifyWord16 pc
+        , "SP:     " ++ prettifyWord16 sp
+        , "O:      " ++ prettifyWord16 o
+        , "SKIP:   " ++ prettifyWord16 skip
+        , "CYCLES: " ++ prettifyWord16 cycles
         , ""
         ]
 

@@ -4,9 +4,11 @@ module Instruction
     , Instruction (..)
     , decodeInstruction
     , encodeInstruction
+    , instructionCycles
     , Operand (..)
     , decodeOperand
     , encodeOperand
+    , operandCycles
     ) where
 
 import Data.Bits (shiftL, shiftR, (.&.), (.|.))
@@ -107,6 +109,30 @@ encodeInstruction (NonBasicInstruction op a) =
         Jsr -> 0x01
 encodeInstruction (UnknownInstruction word) = word
 
+-- | How many cycles does the instruction take?
+instructionCycles :: Instruction Operand -> Int
+instructionCycles (BasicInstruction op a b) =
+    operandCycles a + operandCycles b + case op of
+        Set -> 1
+        Add -> 2
+        Sub -> 2
+        Mul -> 2
+        Div -> 3
+        Mod -> 3
+        Shl -> 2
+        Shr -> 2
+        And -> 1
+        Bor -> 1
+        Xor -> 1
+        Ife -> 2
+        Ifn -> 2
+        Ifg -> 2
+        Ifb -> 2
+instructionCycles (NonBasicInstruction op a) =
+    operandCycles a + case op of
+        Jsr -> 2
+instructionCycles (UnknownInstruction _) = 0
+
 data Operand
     = ORegister Register
     | OPRegister Register
@@ -158,3 +184,10 @@ encodeOperand operand = case operand of
     ONextWord                  -> 0x1f
   where
     unreg = fromIntegral . fromEnum
+
+operandCycles :: Operand -> Int
+operandCycles operand = case operand of
+    OPNextWordPlusRegister _ -> 1
+    OPNextWord               -> 1
+    ONextWord                -> 1
+    _                        -> 0
