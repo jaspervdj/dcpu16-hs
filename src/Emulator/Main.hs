@@ -7,7 +7,7 @@ import System.Console.CmdArgs
 import qualified Data.ByteString as B
 
 import Emulator
-import Emulator.Monad.ST
+import Emulator.Monad.IO
 
 data Config = Config
     { pretty :: Maybe FilePath
@@ -24,7 +24,7 @@ main :: IO ()
 main = do
     config'  <- cmdArgs config
     program' <- B.readFile (binary config')
-    let pretty' = runSTEmulator $ do
+    pretty'  <- runIOEmulator $ do
             loadProgram program'
             emulate
             prettify
