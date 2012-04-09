@@ -26,6 +26,7 @@ Executable dcpu16-emulator
   Build-depends:       
     base       >= 4   && < 5,
     bytestring >= 0.9 && < 0.10,
+    cmdargs    >= 0.8 && < 0.10,
     ghc-prim   >= 0.2 && < 0.3,
     mtl        >= 2.0 && < 2.1
 
@@ -44,6 +45,7 @@ Executable dcpu16-assembler
     base          >= 4   && < 5,
     blaze-builder >= 0.3 && < 0.4,
     bytestring    >= 0.9 && < 0.10,
+    cmdargs       >= 0.8 && < 0.10,
     containers    >= 0.3 && < 0.5,
     parsec        >= 3.1 && < 3.2
 

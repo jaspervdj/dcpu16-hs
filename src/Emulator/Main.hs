@@ -1,28 +1,32 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, ScopedTypeVariables #-}
 module Main where
 
-import System.Environment (getArgs, getProgName)
-import System.Exit (exitFailure)
+import Data.Foldable (forM_)
 
+import System.Console.CmdArgs
 import qualified Data.ByteString as B
 
 import Emulator
 import Emulator.Monad.ST
 
+data Config = Config
+    { pretty :: Maybe FilePath
+    , binary :: FilePath
+    } deriving (Data, Show, Typeable)
+
+config :: Config
+config = Config
+    { pretty = def &= help "Prettified memory dump" &= typFile
+    , binary = def &= argPos 0 &= typFile
+    } &= summary "dcpu16-emulator"
+
 main :: IO ()
 main = do
-    progName <- getProgName
-    args     <- getArgs
-    case args of
-        [x] -> do
-            bytes <- B.readFile x
-            let pretty = runSTEmulator $ do
-                    loadProgram bytes
-                    emulate
-                    prettify
+    config'  <- cmdArgs config
+    program' <- B.readFile (binary config')
+    let pretty' = runSTEmulator $ do
+            loadProgram program'
+            emulate
+            prettify
 
-            putStr pretty
-
-        _   -> do
-            putStr $ "Usage: " ++ progName ++ " <executable>"
-            exitFailure
+    forM_ (pretty config') $ \path -> writeFile path pretty'

@@ -31,9 +31,9 @@ Running
 
 This produces `a.out`.
 
-    ./dist/build/dcpu16-emulator/dcpu16-emulator a.out
+    ./dist/build/dcpu16-emulator/dcpu16-emulator --pretty out a.out
 
-You should probably redirect the output to a file.
+This gives you a pretty-printed memory dump in `out` you can study.
 
 Design
 ------
