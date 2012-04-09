@@ -3,8 +3,10 @@ module Examples
     ( tests
     ) where
 
+import Control.Monad (forM)
 import Control.Monad.Reader (ask)
 import Control.Monad.ST (ST, runST)
+import Data.List (sort)
 
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -25,6 +27,10 @@ tests = testGroup "Examples"
     , testCase "sum-squares.s" $ example "examples/sum-squares.s" $ \mem -> do
         x <- Memory.load mem $ Memory.register Memory.X
         return $ sum [n * n | n <- [0 .. 50]] @=? x
+
+    , testCase "bubble-sort.s" $ example "examples/bubble-sort.s" $ \mem -> do
+        xs <- forM [0 .. 9] $ Memory.load mem . Memory.ram . (0x1000 +)
+        return $ sort xs @=? xs
     ]
 
 example :: FilePath
