@@ -46,8 +46,13 @@ to:
 - Registers (`A`, `B`...)
 - RAM
 
-All these values can be accessed if you know its `Address`, which is statically
-known for e.g. `SP`, and can be calculated for e.g. the RAM at `0x1000`.
+These values can accessed by an `Address`, which is a simple ADT:
+
+    data Address
+        = Sp
+        | Pc
+        | Ram Word16
+        | ...
 
 The core of the design is hence a monadic typeclass:
 

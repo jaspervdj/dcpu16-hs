@@ -16,26 +16,26 @@ import Assembler
 import Emulator
 import Emulator.Monad
 import Emulator.Monad.ST
-import qualified Memory as Memory
+import Memory (Address (..), Register (..))
 
 tests :: Test
 tests = testGroup "Examples"
     [ testCase "notch.s" $ example "examples/notch.s" $ do
-        x      <- load $ Memory.register Memory.X
-        cycles <- load Memory.cycles
+        x      <- load $ Register X
+        cycles <- load Cycles
         return $ (0x40, 106) @=? (x, cycles)
 
     , testCase "sum-squares.s" $ example "examples/sum-squares.s" $ do
-        x <- load $ Memory.register Memory.X
+        x <- load $ Register X
         return $ sum [n * n | n <- [0 .. 50]] @=? x
 
     , testCase "bubble-sort.s" $ example "examples/bubble-sort.s" $ do
-        xs <- forM [0 .. 9] $ load . Memory.ram . (0x1000 +)
+        xs <- forM [0 .. 9] $ load . Ram . (0x1000 +)
         return $ sort xs @=? xs
 
     , testCase "32-bit-add.s" $ example "examples/32-bit-add.s" $ do
-        lo <- load $ Memory.ram 0x1000
-        hi <- load $ Memory.ram 0x1001
+        lo <- load $ Ram 0x1000
+        hi <- load $ Ram 0x1001
         let sum' = (fromIntegral hi `shiftL` 16) + fromIntegral lo :: Int
         return $ 0x12345678 + 0xaabbccdd @=? sum'
     ]
