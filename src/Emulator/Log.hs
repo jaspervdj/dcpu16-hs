@@ -33,13 +33,11 @@ core = do
     pc     <- load Pc
     sp     <- load Sp
     o      <- load O
-    skip   <- load Skip
     cycles <- load Cycles
     return $ intercalate ", " $
         [ "PC: "     ++ prettifyWord16 pc
         , "SP: "     ++ prettifyWord16 sp
         , "O: "      ++ prettifyWord16 o
-        , "SKIP: "   ++ prettifyWord16 skip
         , "CYCLES: " ++ prettifyWord16 cycles
         ]
 

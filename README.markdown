@@ -42,7 +42,7 @@ We use a homogeneous `Memory` type for all kinds of memory the CPU has access
 to:
 
 - Special values such as `SP`, `PC` and `O`
-- Custom defined (i.e. not in the spec) values such as `SKIP`, `CYCLES`
+- Custom defined (i.e. not in the spec) values such as `CYCLES`
 - Registers (`A`, `B`...)
 - RAM
 

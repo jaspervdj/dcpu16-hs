@@ -24,7 +24,6 @@ data Address
     = Pc
     | Sp
     | O
-    | Skip
     | Cycles
     | Register Register
     | Ram Word16
@@ -34,7 +33,6 @@ fromAddress :: Address -> Int
 fromAddress Pc           = 0x0
 fromAddress Sp           = 0x1
 fromAddress O            = 0x2
-fromAddress Skip         = 0x3
 fromAddress Cycles       = 0x4
 fromAddress (Register r) = 0x8  + fromEnum r
 fromAddress (Ram r)      = 0x16 + fromIntegral r
@@ -47,7 +45,6 @@ new = do
     store mem Pc     0x0000
     store mem Sp     0xffff
     store mem O      0x0000
-    store mem Skip   0x0000
     store mem Cycles 0x0000
     return mem
 

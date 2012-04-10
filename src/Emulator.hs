@@ -10,6 +10,7 @@ module Emulator
     ) where
 
 import Control.Applicative ((<$>))
+import Control.Monad (unless)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Word (Word, Word16)
 
@@ -110,11 +111,10 @@ emulateWith :: MonadEmulator m
             => (Instruction Operand -> Instruction Value -> m ())
             -> m ()
 emulateWith callback = do
-    instr <- loadInstruction
+    (instr, instr') <- loadInstructionOperands
     case instr of
         UnknownInstruction _ -> return ()
         _                    -> do
-            instr' <- loadOperands instr
             execute instr instr'
             callback instr instr'
             emulateWith callback
@@ -133,16 +133,17 @@ loadOperands (NonBasicInstruction op a) = do
 loadOperands (UnknownInstruction w) =
     return $ UnknownInstruction w
 
+loadInstructionOperands :: MonadEmulator m
+                        => m (Instruction Operand, Instruction Value)
+loadInstructionOperands = do
+    instr  <- loadInstruction
+    instr' <- loadOperands instr
+    return (instr, instr')
+
 execute :: MonadEmulator m => Instruction Operand -> Instruction Value -> m ()
 execute instr instr' = do
-    skip <- load Skip
-    if (skip == 0x0000)
-        then do
-            execute' instr'
-            addCycles $ instructionCycles instr
-        else do
-            store Skip 0x0000
-            addCycles 1
+    execute' instr'
+    addCycles $ instructionCycles instr
 
 execute' :: MonadEmulator m => Instruction Value -> m ()
 execute' (BasicInstruction Set a b) = do
@@ -216,19 +217,19 @@ execute' (BasicInstruction Xor a b) = do
 execute' (BasicInstruction Ife a b) = do
     x <- loadValue a
     y <- loadValue b
-    store Skip (if x == y then 0x0000 else 0x0001)
+    unless (x == y) skipInstruction
 execute' (BasicInstruction Ifn a b) = do
     x <- loadValue a
     y <- loadValue b
-    store Skip (if x /= y then 0x0000 else 0x0001)
+    unless (x /= y) skipInstruction
 execute' (BasicInstruction Ifg a b) = do
     x <- loadValue a
     y <- loadValue b
-    store Skip (if x > y then 0x0000 else 0x0001)
+    unless (x > y) skipInstruction
 execute' (BasicInstruction Ifb a b) = do
     x <- loadValue a
     y <- loadValue b
-    store Skip $ if (x .&. y) == 0 then 0x0000 else 0x0001
+    unless (x .&. y == 0) skipInstruction
 execute' (NonBasicInstruction Jsr a) = do
     pcv  <- load Pc
     x    <- loadValue a
@@ -237,3 +238,9 @@ execute' (NonBasicInstruction Jsr a) = do
     store Pc x                                          -- Set PC to a (jump)
 execute' (UnknownInstruction _) =
     return ()
+
+-- | Skip a single instruction. This takes 1 cycle.
+skipInstruction :: MonadEmulator m => m ()
+skipInstruction = do
+    _ <- loadInstructionOperands
+    addCycles 1
