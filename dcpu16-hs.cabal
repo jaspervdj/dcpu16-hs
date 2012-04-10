@@ -17,6 +17,7 @@ Executable dcpu16-emulator
   
   Other-modules:       
     Emulator
+    Emulator.Log
     Emulator.Monad
     Emulator.Monad.ST
     Emulator.Monad.IO

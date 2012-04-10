@@ -1,15 +1,15 @@
 {-# LANGUAGE BangPatterns, Rank2Types #-}
 module Emulator
-    ( loadProgram
+    ( Value (..)
+    , loadProgram
     , emulate
+    , emulateWith
     , loadInstruction
     , loadOperands
     , execute
-    , prettify
     ) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (forM)
 import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Word (Word, Word16)
 
@@ -20,6 +20,16 @@ import Emulator.Monad
 import Instruction
 import Memory (Address (..))
 import Util
+
+-- | After we load an operand, we get a value. This is either an address (we
+-- can write back to) or a literal value.
+data Value
+    = Address Address
+    | Literal Word16
+
+instance Show Value where
+    show (Address a) = "[" ++ show a ++ "]"
+    show (Literal l) = prettifyWord16 l
 
 -- | Load a program from a bytestring
 loadProgram :: MonadEmulator m => ByteString -> m ()
@@ -47,13 +57,6 @@ addCycles :: MonadEmulator m => Int -> m ()
 addCycles c = do
     cycles <- load Cycles
     store Cycles (cycles + fromIntegral c)
-
--- | After we load an operand, we get a value. This is either an address (we
--- can write back to) or a literal value.
-data Value
-    = Address Address
-    | Literal Word16
-    deriving (Show)
 
 loadOperand :: MonadEmulator m => Operand -> m Value
 loadOperand (ORegister reg) =
@@ -99,15 +102,22 @@ storeValue :: MonadEmulator m => Value -> Word16 -> m ()
 storeValue (Address address) val = store address val
 storeValue (Literal _)       _   = return ()
 
--- | Stops when an unknown instruction is encountered
 emulate :: MonadEmulator m => m ()
-emulate = do
+emulate = emulateWith $ const $ const $ return ()
+
+-- | Stops when an unknown instruction is encountered
+emulateWith :: MonadEmulator m
+            => (Instruction Operand -> Instruction Value -> m ())
+            -> m ()
+emulateWith callback = do
     instr <- loadInstruction
     case instr of
         UnknownInstruction _ -> return ()
         _                    -> do
-            loadOperands instr >>= execute instr
-            emulate
+            instr' <- loadOperands instr
+            execute instr instr'
+            callback instr instr'
+            emulateWith callback
 
 loadInstruction :: MonadEmulator m => m (Instruction Operand)
 loadInstruction = decodeInstruction <$> loadNextWord
@@ -227,44 +237,3 @@ execute' (NonBasicInstruction Jsr a) = do
     store Pc x                                          -- Set PC to a (jump)
 execute' (UnknownInstruction _) =
     return ()
-
-prettify :: MonadEmulator m => m String
-prettify = unlines . concat <$>
-    sequence [prettifyEmulator, prettifyRegister, prettifyRam]
-
-prettifyEmulator :: MonadEmulator m => m [String]
-prettifyEmulator = do
-    pc     <- load Pc
-    sp     <- load Sp
-    o      <- load O
-    skip   <- load Skip
-    cycles <- load Cycles
-    return $
-        [ "EMULATOR"
-        , ""
-        , "PC:     " ++ prettifyWord16 pc
-        , "SP:     " ++ prettifyWord16 sp
-        , "O:      " ++ prettifyWord16 o
-        , "SKIP:   " ++ prettifyWord16 skip
-        , "CYCLES: " ++ prettifyWord16 cycles
-        , ""
-        ]
-
-prettifyRegister :: MonadEmulator m => m [String]
-prettifyRegister = do
-    registers <- forM [minBound .. maxBound] $ \name -> do
-        val <- load (Register name)
-        return (name, val)
-    return $
-        ["REGISTER", ""] ++
-        [show name ++ ": " ++ prettifyWord16 val | (name, val) <- registers] ++
-        [""]
-
-prettifyRam :: MonadEmulator m => m [String]
-prettifyRam = do
-    ls <- mapM line [(x * 8, x * 8 + 7) | x <- [0 .. 0xffff `div` 8]]
-    return $ ["RAM", ""] ++ ls ++ [""]
-  where
-    line (lo, up) = do
-        vals <- mapM (load . Ram) [lo .. up]
-        return $ prettifyWord16 lo ++ ": " ++ unwords (map prettifyWord16 vals)

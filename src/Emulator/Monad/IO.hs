@@ -8,7 +8,7 @@ module Emulator.Monad.IO
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.ST (RealWorld, stToIO)
-import Control.Monad.Trans (lift)
+import Control.Monad.Trans (MonadIO, lift)
 
 import Emulator.Monad
 import Emulator.Video
@@ -16,7 +16,7 @@ import Memory (Memory)
 import qualified Memory as Memory
 
 newtype IOEmulator a = IOEmulator (ReaderT (Memory RealWorld) IO a)
-    deriving (Functor, Monad)
+    deriving (Functor, Monad, MonadIO)
 
 instance MonadEmulator IOEmulator where
     load address = IOEmulator $ do

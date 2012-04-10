@@ -43,7 +43,11 @@ data Instruction a
     = BasicInstruction BasicInstruction a a
     | NonBasicInstruction NonBasicInstruction a
     | UnknownInstruction Word16
-    deriving (Show)
+
+instance Show a => Show (Instruction a) where
+    show (BasicInstruction op a b)  = unwords [show op, show a, show b]
+    show (NonBasicInstruction op a) = unwords [show op, show a]
+    show (UnknownInstruction w)     = "??? (" ++ show w ++ ")"
 
 decodeInstruction :: Word16 -> Instruction Operand
 decodeInstruction word = case oooo of
@@ -146,7 +150,20 @@ data Operand
     | OO
     | OPNextWord
     | ONextWord
-    deriving (Show)
+
+instance Show Operand where
+    show (ORegister r)              = show r
+    show (OPRegister r)             = "[" ++ show r ++ "]"
+    show (OPNextWordPlusRegister r) = "[next word + " ++ show r ++ "]"
+    show (OLiteral l)               = prettifyWord16 l
+    show OPop                       = "Pop"
+    show OPeek                      = "Peek"
+    show OPush                      = "Push"
+    show OSp                        = "Sp"
+    show OPc                        = "Pc"
+    show OO                         = "O"
+    show OPNextWord                 = "[next word]"
+    show ONextWord                  = "(next word)"
 
 -- | Only looks at the 6 least significant bits
 decodeOperand :: Word16 -> Operand
