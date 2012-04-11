@@ -12,6 +12,8 @@ module Memory
     , store
     ) where
 
+import Control.Monad (forM_)
+
 import GHC.Base (Int (..))
 import GHC.Prim
 import GHC.ST (ST (..))
@@ -56,6 +58,11 @@ new = do
     store mem Sp     0xffff
     store mem O      0x0000
     store mem Cycles 0x0000
+
+    -- TODO: This is slow.
+    forM_ [minBound .. maxBound] $ \r -> store mem (Register r) 0x0000
+    forM_ [minBound .. maxBound] $ \r -> store mem (Ram r)      0x0000
+
     return mem
 
 new' :: ST s (Memory s)

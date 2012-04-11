@@ -3,9 +3,10 @@ module Examples
     ( tests
     ) where
 
+import Control.Applicative ((<$>))
 import Control.Monad (forM)
 import Data.Bits (shiftL)
-import Data.List (sort)
+import Data.List (isPrefixOf, sort)
 
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -50,6 +51,21 @@ tests = testGroup "Examples"
                 if f == f' then loop fs as else return False
 
         return . assert =<< loop fibs addrs
+
+    , testCase "self-copy.s" $ example "examples/self-copy.s" $ do
+        let readRam i = do
+                x <- load $ Ram i
+                if x == 0x0000
+                    then return []
+                    else (x :) <$> readRam (i + 1)
+
+        programs <- readRam 1
+        let len      = length programs `div` 10
+            equal xs = case splitAt len xs of
+                (_, [])  -> True
+                (hs, ts) -> hs `isPrefixOf` ts && equal ts
+
+        return $ assert $ equal programs
     ]
 
 example :: FilePath
