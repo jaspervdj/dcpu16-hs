@@ -27,9 +27,10 @@ import Util
 data Value
     = Address Address
     | Literal Word16
+    deriving (Eq)
 
 instance Show Value where
-    show (Address a) = "[" ++ show a ++ "]"
+    show (Address a) = show a
     show (Literal l) = prettifyWord16 l
 
 -- | Load a program from a bytestring

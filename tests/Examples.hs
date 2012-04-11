@@ -9,7 +9,7 @@ import Data.List (sort)
 
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit (Assertion, (@=?))
+import Test.HUnit (Assertion, assert, (@=?))
 import qualified Data.ByteString as B
 
 import Assembler
@@ -38,6 +38,18 @@ tests = testGroup "Examples"
         hi <- load $ Ram 0x1001
         let sum' = (fromIntegral hi `shiftL` 16) + fromIntegral lo :: Int
         return $ 0x12345678 + 0xaabbccdd @=? sum'
+
+    , testCase "fib.s" $ example "examples/fib.s" $ do
+        let fibs  = 1 : 2 : zipWith (+) fibs (tail fibs)
+            addrs = [0xffff, 0xfffe .. 0x000c]
+
+            loop _        []       = return True
+            loop []       _        = return True
+            loop (f : fs) (a : as) = do
+                f' <- load $ Ram a
+                if f == f' then loop fs as else return False
+
+        return . assert =<< loop fibs addrs
     ]
 
 example :: FilePath

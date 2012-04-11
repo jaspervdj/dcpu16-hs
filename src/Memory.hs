@@ -17,8 +17,10 @@ import GHC.Prim
 import GHC.ST (ST (..))
 import GHC.Word (Word16 (..))
 
+import Util
+
 data Register = A | B | C | X | Y | Z | I | J
-    deriving (Bounded, Enum, Show)
+    deriving (Bounded, Enum, Eq, Show)
 
 data Address
     = Pc
@@ -27,13 +29,21 @@ data Address
     | Cycles
     | Register Register
     | Ram Word16
-    deriving (Show)
+    deriving (Eq)
+
+instance Show Address where
+    show Pc           = "Pc"
+    show Sp           = "Sp"
+    show O            = "O"
+    show Cycles       = "Cycles"
+    show (Register r) = show r
+    show (Ram r)      = "[" ++ prettifyWord16 r ++ "]"
 
 fromAddress :: Address -> Int
 fromAddress Pc           = 0x0
 fromAddress Sp           = 0x1
 fromAddress O            = 0x2
-fromAddress Cycles       = 0x4
+fromAddress Cycles       = 0x3
 fromAddress (Register r) = 0x8  + fromEnum r
 fromAddress (Ram r)      = 0x16 + fromIntegral r
 
@@ -50,7 +60,7 @@ new = do
 
 new' :: ST s (Memory s)
 new' = ST $ \s1# ->
-    case newByteArray# (len# *# 2#) s1# of
+    case newAlignedPinnedByteArray# (len# *# 2#) 2# s1# of
         (# s2#, marr# #) -> (# s2#, Memory marr# #)
   where
     !(I# len#) = 0x8 + 0x8 + 0x10000
