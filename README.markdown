@@ -27,7 +27,7 @@ Building
 Running
 -------
 
-    ./dist/build/dcpu16-assembler/dcpu16-assembler examples/notch.s
+    ./dist/build/dcpu16-assembler/dcpu16-assembler examples/notch.dasm16
 
 This produces `a.out`.
 
